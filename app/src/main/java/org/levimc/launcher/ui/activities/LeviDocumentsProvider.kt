@@ -54,7 +54,7 @@ class LeviDocumentsProvider : DocumentsProvider() {
 
     override fun onCreate(): Boolean {
         baseDir = context!!.getExternalFilesDir(null)!!
-    if (!baseDir.exists()) baseDir.mkdirs()
+        if (!baseDir.exists()) baseDir.mkdirs()
         return true
     }
 
@@ -141,7 +141,7 @@ class LeviDocumentsProvider : DocumentsProvider() {
 
     override fun deleteDocument(documentId: String) {
         val file = getFileForDocId(documentId)
-        if (!file.deleteRecursively()) {
+        if (!file.delete()) {
             throw FileNotFoundException("Failed to delete ${file.absolutePath}")
         }
     }
@@ -160,46 +160,10 @@ class LeviDocumentsProvider : DocumentsProvider() {
         return null
     }
 
-    override fun copyDocument(sourceDocumentId: String, targetParentDocumentId: String): String? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val source = getFileForDocId(sourceDocumentId)
-            val targetParent = getFileForDocId(targetParentDocumentId)
-            val target = File(targetParent, source.name)
-            
-            source.copyTo(target, overwrite = false)
-            return getDocIdForFile(target)
-        }
-        return super.copyDocument(sourceDocumentId, targetParentDocumentId)
-    }
-
-    override fun moveDocument(sourceDocumentId: String, sourceParentDocumentId: String, targetParentDocumentId: String): String? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val source = getFileForDocId(sourceDocumentId)
-            val targetParent = getFileForDocId(targetParentDocumentId)
-            val target = File(targetParent, source.name)
-            
-            if (source.renameTo(target)) {
-                return getDocIdForFile(target)
-            }
-            throw FileNotFoundException("Failed to move document")
-        }
-        return super.moveDocument(sourceDocumentId, sourceParentDocumentId, targetParentDocumentId)
-    }
-
-    override fun removeDocument(documentId: String, parentDocumentId: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            deleteDocument(documentId)
-        } else {
-            super.removeDocument(documentId, parentDocumentId)
-        }
-    }
-
     private fun getRootFlags(): Long {
-        var flags: Long = DocumentsContract.Root.FLAG_LOCAL_ONLY.toLong()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            flags = flags or DocumentsContract.Root.FLAG_SUPPORTS_CREATE.toLong() or DocumentsContract.Root.FLAG_SUPPORTS_IS_CHILD.toLong()
-        }
-        return flags
+        return DocumentsContract.Root.FLAG_LOCAL_ONLY.toLong() or
+               DocumentsContract.Root.FLAG_SUPPORTS_CREATE.toLong() or
+               DocumentsContract.Root.FLAG_SUPPORTS_IS_CHILD.toLong()
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -241,9 +205,7 @@ class LeviDocumentsProvider : DocumentsProvider() {
             } else {
                 flags = flags or DocumentsContract.Document.FLAG_SUPPORTS_WRITE.toLong()
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                flags = flags or DocumentsContract.Document.FLAG_SUPPORTS_RENAME.toLong()
-            }
+            flags = flags or DocumentsContract.Document.FLAG_SUPPORTS_RENAME.toLong()
         }
 
         if (getTypeForFile(f).startsWith("image/")) {
@@ -261,18 +223,22 @@ class LeviDocumentsProvider : DocumentsProvider() {
     }
 
     private fun getFileIcon(file: File): Int {
-    return when {
-        file.isDirectory -> 0
-        getTypeForFile(file).startsWith("image/") -> android.R.drawable.ic_menu_gallery
-        else -> 0
+        return when {
+            file.isDirectory -> 0
+            getTypeForFile(file).startsWith("image/") -> android.R.drawable.ic_menu_gallery
+            else -> 0
+        }
     }
-}
 
-    private fun getDocIdForFile(file: File): String = file.absolutePath
+    private fun getDocIdForFile(file: File): String {
+        val path = file.absolutePath
+        val basePath = baseDir.absolutePath
+        return if (path == basePath) "/" else path.substring(basePath.length)
+    }
 
     @Throws(FileNotFoundException::class)
     private fun getFileForDocId(docId: String): File {
-        val file = File(docId)
+        val file = if (docId == "/") baseDir else File(baseDir, docId)
         if (!file.exists()) throw FileNotFoundException("Missing file for $docId")
         return file
     }
